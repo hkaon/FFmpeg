@@ -43,6 +43,7 @@ jobs:
             --enable-libopencore-amrwb \
             --enable-libvo-amrwbenc \
             --enable-libopus \
+            --pkg-config-flags="--static" \
             --extra-ldflags="-static"
 
       - name: Build FFmpeg
