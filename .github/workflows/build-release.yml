@@ -1,0 +1,84 @@
+name: Build and Release FFmpeg n8.1
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            nasm \
+            yasm \
+            pkg-config \
+            libopencore-amrnb-dev \
+            libopencore-amrwb-dev \
+            libvo-amrwbenc-dev \
+            libopus-dev
+
+      - name: Checkout FFmpeg n8.1
+        uses: actions/checkout@v4
+        with:
+          ref: n8.1
+          fetch-depth: 1
+
+      - name: Configure FFmpeg
+        run: |
+          ./configure \
+            --prefix=/usr/local \
+            --enable-gpl \
+            --enable-version3 \
+            --enable-nonfree \
+            --enable-static \
+            --disable-shared \
+            --disable-debug \
+            --enable-libopencore-amrnb \
+            --enable-libopencore-amrwb \
+            --enable-libvo-amrwbenc \
+            --enable-libopus \
+            --extra-ldflags="-static"
+
+      - name: Build FFmpeg
+        run: make -j$(nproc)
+
+      - name: Verify codecs
+        run: |
+          echo "=== AMR-NB ==="
+          ./ffmpeg -hide_banner -encoders 2>/dev/null | grep amr_nb || true
+          ./ffmpeg -hide_banner -decoders 2>/dev/null | grep amrnb || true
+          echo "=== AMR-WB ==="
+          ./ffmpeg -hide_banner -encoders 2>/dev/null | grep amr_wb || true
+          ./ffmpeg -hide_banner -decoders 2>/dev/null | grep amrwb || true
+          echo "=== Opus ==="
+          ./ffmpeg -hide_banner -encoders 2>/dev/null | grep opus || true
+          ./ffmpeg -hide_banner -decoders 2>/dev/null | grep opus || true
+
+      - name: Strip and package binaries
+        run: |
+          strip ffmpeg ffprobe
+          mkdir -p release
+          cp ffmpeg ffprobe release/
+          tar czf ffmpeg-n8.1-linux-x86_64.tar.gz -C release .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ffmpeg-n8.1
+          name: "FFmpeg n8.1 (AMR-NB/WB + Opus)"
+          body: |
+            FFmpeg n8.1 static build for Linux x86_64.
+
+            **Enabled codecs:**
+            - AMR-NB encode/decode (libopencore-amrnb)
+            - AMR-WB decode (libopencore-amrwb)
+            - AMR-WB encode (libvo-amrwbenc)
+            - Opus encode/decode (libopus)
+          files: ffmpeg-n8.1-linux-x86_64.tar.gz
+          make_latest: true
